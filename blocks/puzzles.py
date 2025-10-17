@@ -22,7 +22,7 @@ basket_constraint = blocks.Piece(
     ],
     # fmt: on
     name="basket_constraint"
-)
+).translate(-1, -1, -1)
 
 chicken_basket = [
     blocks.Piece(
