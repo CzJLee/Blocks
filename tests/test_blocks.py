@@ -1,5 +1,6 @@
 import unittest
 import parameterized
+from blocks import blocks
 from blocks.blocks import Piece
 
 NON_CONNECTED_DIAGONAL_PIECE = Piece({(0, 0, 0), (1, 1, 1)}, validate=False)
@@ -7,6 +8,8 @@ NON_CONNECTED_EDGE_PIECE = Piece({(0, 0, 0), (1, 1, 0)}, validate=False)
 CORNER_PIECE = Piece({(0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1)})
 SQUARE_PIECE = Piece({(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0)})
 CUBIT_PIECE = Piece({(0, 0, 0)})
+C_PIECE = Piece({(0, 0, 0), (0, 1, 0), (1, 0, 0), (0, 2, 0), (1, 2, 0)})
+C_PIECE_MIRROR = Piece({(0, 0, 0), (1, 0, 0), (1, 1, 0), (1, 2, 0), (0, 2, 0)})
 
 
 class TestPiece(unittest.TestCase):
@@ -16,6 +19,8 @@ class TestPiece(unittest.TestCase):
             parameterized.param("corner_piece", piece=CORNER_PIECE, expected=4),
             parameterized.param("square_piece", piece=SQUARE_PIECE, expected=4),
             parameterized.param("cubit_piece", piece=CUBIT_PIECE, expected=1),
+            parameterized.param("c_piece", piece=C_PIECE, expected=5),
+            parameterized.param("c_piece_mirror", piece=C_PIECE_MIRROR, expected=5),
         ],
     )
     def test_len(self, _, piece: Piece, expected: int):
@@ -99,6 +104,67 @@ class TestPiece(unittest.TestCase):
     )
     def test_is_congruent(self, _, piece_a: Piece, piece_b: Piece, expected: bool):
         self.assertEqual(piece_a.is_congruent(piece_b), expected)
+
+    @parameterized.parameterized.expand(
+        [
+            parameterized.param(
+                "corner_piece",
+                piece=CORNER_PIECE,
+                expected=Piece(
+                    {
+                        (0, 0, 0),
+                        (1, 0, 0),
+                        (0, 1, 0),
+                        (1, 1, 0),
+                        (0, 0, 1),
+                        (1, 0, 1),
+                        (0, 1, 1),
+                        (1, 1, 1),
+                    }
+                ),
+            ),
+            parameterized.param(
+                "square_piece",
+                piece=SQUARE_PIECE,
+                expected=Piece({(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0)}),
+            ),
+        ],
+    )
+    def test_bounding_box_cuboid(self, _, piece: Piece, expected: Piece):
+        self.assertEqual(piece.bounding_box_cuboid(), expected)
+
+    @parameterized.parameterized.expand(
+        [
+            parameterized.param(
+                "c_piece_intersecting",
+                piece_a=C_PIECE,
+                piece_b=C_PIECE_MIRROR,
+                expected=False,
+            ),
+            parameterized.param(
+                "c_piece_connected",
+                piece_a=C_PIECE,
+                piece_b=C_PIECE_MIRROR.translate(0, 1, 0),
+                expected=False,
+            ),
+            parameterized.param(
+                "c_piece_disconnected_y",
+                piece_a=C_PIECE,
+                piece_b=C_PIECE_MIRROR.translate(0, 3, 0),
+                expected=True,
+            ),
+            parameterized.param(
+                "c_piece_disconnected_z",
+                piece_a=C_PIECE,
+                piece_b=C_PIECE_MIRROR.translate(0, 0, 1),
+                expected=True,
+            ),
+        ],
+    )
+    def test_pieces_disconnected(
+        self, _, piece_a: Piece, piece_b: Piece, expected: bool
+    ):
+        self.assertEqual(blocks.pieces_disconnected(piece_a, piece_b), expected)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ type Voxel = tuple[int, int, int]
 type Voxels = set[Voxel]
 """A set of voxels that represent a solid puzzle piece or space."""
 
+
 class Piece:
     """Piece class."""
 
@@ -153,6 +154,17 @@ class Piece:
         zs = [z for (_, _, z) in self.voxels]
         return ((min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs)))
 
+    def bounding_box_cuboid(self) -> "Piece":
+        """Create a cuboid piece of the bounding box of this piece."""
+        ((min_x, min_y, min_z), (max_x, max_y, max_z)) = self.bounding_box()
+        voxels = {
+            (x, y, z)
+            for x in range(min_x, max_x + 1)
+            for y in range(min_y, max_y + 1)
+            for z in range(min_z, max_z + 1)
+        }
+        return Piece(voxels, canonicalize=False)
+
     def __eq__(self, other: object) -> bool:
         """Checks if pieces are exactly equal."""
         if not isinstance(other, Piece):
@@ -295,6 +307,16 @@ class Solver:
                     self._solve_recursive(next_remaining, placed_pieces)
                     placed_pieces.pop()
                     self.space.remove(candidate)
+
+
+def pieces_disconnected(piece_a: Piece, piece_b: Piece) -> bool:
+    """Checks if two pieces can be trivially infinitely separated.
+
+    Two pieces can be considered disconnected if there is no intersection of their bounding boxes.
+    """
+    return piece_a.bounding_box_cuboid().voxels.isdisjoint(
+        piece_b.bounding_box_cuboid().voxels
+    )
 
 
 if __name__ == "__main__":
