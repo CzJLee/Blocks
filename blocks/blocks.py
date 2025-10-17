@@ -198,13 +198,19 @@ class Piece:
 
 
 class Space:
-    def __init__(self, allowed_voxels: Voxels):
+    def __init__(self, allowed_voxels: Voxels, constraint: Voxels = set()):
         """
-        allowed_voxels: set of (x, y, z) tuples where pieces are allowed.
+        Create a Space for valid solutions.
+
         Can represent any shape of space, not just a cuboid.
+
+        Args:
+            allowed_voxels: Set of (x, y, z) tuples where pieces are allowed.
+            constraint: Set of Voxels that act as a container / constraint. Often used for packing puzzles.
         """
         self.allowed_voxels = allowed_voxels
-        self.occupied_voxels: Voxels = set()
+        self.constraint = constraint
+        self.pieces: set[Piece] = set()
 
     @classmethod
     def cuboid(cls, size_x: int, size_y: int, size_z: int) -> "Space":
@@ -216,6 +222,15 @@ class Space:
             for z in range(size_z)
         }
         return cls(voxels)
+
+    @property
+    def occupied_voxels(self) -> Voxels:
+        """Return all voxels that are occupied by pieces."""
+        voxels: Voxels = set()
+        # Union all pieces
+        for piece in self.pieces:
+            voxels.update(piece.voxels)
+        return voxels
 
     def can_place(self, piece: Piece) -> bool:
         """Check if piece in its current position and orientation can fit into the space and does not overlap occupied voxels."""
@@ -234,14 +249,14 @@ class Space:
         if validate:
             if not self.can_place(piece):
                 raise ValueError("Cannot place piece in space.")
-        self.occupied_voxels |= piece.voxels
+        self.pieces.add(piece)
 
     def remove(self, piece: Piece):
         """Remove a piece from space (for backtracking)."""
-        self.occupied_voxels -= piece.voxels
+        self.pieces.remove(piece)
 
 
-class Solver:
+class SolverAssembly:
     def __init__(self, space: Space, pieces: list[Piece]):
         self.space = space
         self.pieces = sorted(
@@ -308,6 +323,15 @@ class Solver:
                     placed_pieces.pop()
                     self.space.remove(candidate)
 
+def cuboid(size_x: int, size_y: int, size_z: int) -> Voxels:
+    """Create a rectangular set of Voxels of shape (size_x, size_y, size_z)."""
+    voxels = {
+        (x, y, z)
+        for x in range(size_x)
+        for y in range(size_y)
+        for z in range(size_z)
+    }
+    return voxels
 
 def pieces_disconnected(piece_a: Piece, piece_b: Piece) -> bool:
     """Checks if two pieces can be trivially infinitely separated.
@@ -419,7 +443,7 @@ if __name__ == "__main__":
     )
     roughhouse = [p1, p2, p3, p4, p5]
 
-    solver = Solver(
+    solver = SolverAssembly(
         space=Space.cuboid(3, 3, 3),
         pieces=vegetable_basket,
     )

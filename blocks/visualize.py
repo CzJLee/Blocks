@@ -79,9 +79,12 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import List
+from . import blocks
+import matplotlib
 
-def plot_solution_pieces(solution: List["Piece"], title: str = "Solution", show: bool = True):
+matplotlib.use("Qt5Agg")
+
+def plot_solution_pieces(solution: list[blocks.Piece], title: str = "Solution", show: bool = True):
     """
     Plot a single solution: a list of Piece objects, each drawn in a different color.
     Each Piece.voxels gives the set of (x, y, z) integer tuples.
@@ -165,7 +168,7 @@ def plot_solution_pieces(solution: List["Piece"], title: str = "Solution", show:
         plt.show()
 
 
-def plot_solutions(solutions: List[List["Piece"]], max_plots: int = 4):
+def plot_solutions(solutions: list[list[blocks.Piece]], max_plots: int = 4):
     """
     Plot up to max_plots solutions, each in its own subplot.
 
