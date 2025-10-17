@@ -2,8 +2,8 @@ import unittest
 import parameterized
 from blocks.blocks import Piece
 
-NON_CONNECTED_DIAGONAL_PIECE = Piece({(0, 0, 0), (1, 1, 1)})
-NON_CONNECTED_EDGE_PIECE = Piece({(0, 0, 0), (1, 1, 0)})
+NON_CONNECTED_DIAGONAL_PIECE = Piece({(0, 0, 0), (1, 1, 1)}, validate=False)
+NON_CONNECTED_EDGE_PIECE = Piece({(0, 0, 0), (1, 1, 0)}, validate=False)
 CORNER_PIECE = Piece({(0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1)})
 SQUARE_PIECE = Piece({(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0)})
 
@@ -13,7 +13,7 @@ class TestPiece(unittest.TestCase):
     def test_translate(self):
         p = Piece({(0, 0, 0), (1, 0, 0)})
         translated = p.translate(1, 1, 1)
-        self.assertEqual(translated, Piece({(1, 1, 1), (2, 1, 1)}))
+        self.assertEqual(translated, Piece({(1, 1, 1), (2, 1, 1)}, canonicalize=False))
 
     def test_rotate_x(self):
         """Test rotating a piece around the x-axis"""
