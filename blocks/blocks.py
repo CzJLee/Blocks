@@ -1,26 +1,33 @@
+import functools
 from typing import Iterable
+
 import networkx as nx
 import visualize
-import functools
 
 type Voxel = tuple[int, int, int]
 """An (x, y, z) coordinate representing a 1x1x1 unit cube of a piece."""
 
 type Voxels = set[Voxel]
-"""A set of voxels that represent a solid puzzle piece."""
-
+"""A set of voxels that represent a solid puzzle piece or space."""
 
 class Piece:
+    """Piece class."""
+
     def __init__(
         self,
         voxels: Iterable[Voxel],
         name: str = "Piece",
-        canonicalize: bool = True,
+        canonicalize: bool = False,
         validate: bool = True,
     ):
         """
-        voxels: an iterable of (x, y, z) tuples indicating which unit voxels the piece occupies.
-        We canonicalize so that the piece's voxels are shifted so that the minimal x, y, z are 0.
+        Create a piece.
+
+        Args:
+            voxels: an iterable of (x, y, z) tuples indicating which unit voxels the piece occupies.
+            name: name of the piece.
+            canonicalize: Canonicalize the piece so that the piece's voxels are shifted so that the minimal x, y, z are 0.
+            validate: Check that the piece is contiguous.
         """
         self.name = name
         self.voxels: Voxels = set(voxels)
@@ -31,6 +38,7 @@ class Piece:
             raise ValueError("Piece is not contiguous.")
 
     def __len__(self):
+        """Return the number of voxels in the piece."""
         return len(self.voxels)
 
     def is_contiguous(self):
@@ -157,20 +165,24 @@ class Piece:
         meaning they are equal up to rotation and translation.
         """
         if not isinstance(other, Piece):
-            return False
+            return TypeError("Cannot compare congruence between non-pieces.")
 
-        # Canonicalize the other piece (translation-invariant)
+        # Canonicalize the pieces (translation-invariant)
+        self_canonical = Piece(self.voxels, canonicalize=True)
         other_canonical = Piece(other.voxels, canonicalize=True)
 
         # If self (any rotation) matches other, return True
-        return other_canonical in self.unique_rotations()
+        return other_canonical in self_canonical.unique_rotations()
 
     def __hash__(self) -> int:
         # Hash based on frozenset of coords
         return hash(frozenset(self.voxels))
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return f"{self.name}({sorted(self.voxels)})"
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({sorted(self.voxels)})"
 
 
 class Space:
@@ -205,8 +217,11 @@ class Space:
 
         return can_fit_in_allowed_voxels and does_not_overlap_occupied_voxels
 
-    def place(self, piece: Piece):
+    def place(self, piece: Piece, validate: bool = False):
         """Place a piece (mark voxels as occupied). Assumes can_place was True."""
+        if validate:
+            if not self.can_place(piece):
+                raise ValueError("Cannot place piece in space.")
         self.occupied_voxels |= piece.voxels
 
     def remove(self, piece: Piece):
@@ -217,7 +232,9 @@ class Space:
 class Solver:
     def __init__(self, space: Space, pieces: list[Piece]):
         self.space = space
-        self.pieces = sorted(pieces, key=lambda x: len(x.unique_rotations()), reverse=True)
+        self.pieces = sorted(
+            pieces, key=lambda x: len(x.unique_rotations()), reverse=True
+        )
         self.solutions: list[list[Piece]] = []
 
     def legal_translations(self, piece: Piece) -> list[Piece]:
