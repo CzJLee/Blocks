@@ -1,14 +1,39 @@
 from blocks import blocks
 from blocks import puzzles
 from blocks import visualize
+from blocks import solver_exact_cover
+
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
 
 if __name__ == "__main__":
-    for piece in [puzzles.basket_constraint]:
-        visualize.plot_solution_pieces([piece])
+    # for piece in puzzles.cat_puzzle:
+    #     visualize.plot_solution_pieces([piece])
 
-    # solver = blocks.SolverAssembly(
-    #     space=blocks.Space.cuboid(3, 3, 3),
-    #     pieces=puzzles.vegetable_basket,
+    pieces = puzzles.cat_puzzle
+    space = blocks.Space.cuboid(8, 8, 1)
+
+    solver = solver_exact_cover.SolverExactCover2D(
+        space=space,
+        pieces=pieces,
+        policy=blocks.Policy2DRotationsNoFlip(),
+    )
+
+    solutions = solver.solve()
+    print(len(solutions))
+
+    # solutions = solver.solve()
+
+    # print(f"Found {len(solutions)} solutions.")
+    # for sol in solutions:
+    #     print(sol)
+
+    # visualize.plot_solutions(solutions)
+
+    # solver = blocks.Solver(
+    #     space=blocks.Space.cuboid(8, 8, 1),
+    #     pieces=puzzles.cat_puzzle,
     # )
     # solutions = solver.solve()
 

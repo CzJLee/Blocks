@@ -1,9 +1,11 @@
-from typing import Iterable, Self, Generator
-import networkx as nx
-import visualize
+import abc
 import functools
 import sys
-import abc
+from typing import Generic, Iterable, Self, TypeVar
+import logging
+import networkx as nx
+
+logger = logging.getLogger(__name__)
 
 type Voxel = tuple[int, int, int]
 """An (x, y, z) coordinate representing a 1x1x1 unit cube of a piece."""
@@ -11,20 +13,47 @@ type Voxel = tuple[int, int, int]
 type Voxels = set[Voxel]
 """A set of voxels that represent a solid puzzle piece."""
 
-class AbstractPiece(abc.ABC):
-    @abc.abstractmethod
-    def translate(self, dx: int, dy: int, dz: int) -> Self:
-        pass
+VoxelPieceT = TypeVar("VoxelPieceT", bound="AbstractVoxelPiece")
+"""Type Var for AbstractVoxelPiece."""
+
+
+class AbstractVoxelPiece(abc.ABC):
+    """Abstract base class for an arbitrary voxel set puzzle piece."""
 
     @abc.abstractmethod
-    def rotations(self) -> Generator[Self, None, None]:
-        pass
+    def __len__(self) -> int:
+        """Return the number of voxels in the piece."""
+
+    @property
+    @abc.abstractmethod
+    def voxels(self) -> Voxels:
+        """The voxels that make up this piece."""
 
     @abc.abstractmethod
-    def canonicalize(self):
-        pass
+    def translate(self, *args: int) -> Self:
+        """Return a new Piece shifted along its coordinates by some given values."""
 
-class Piece(AbstractPiece):
+    @abc.abstractmethod
+    def canonicalize(self) -> Self:
+        """Shift coords so that minimal x,y,z are all zero or non-negative."""
+
+
+class TransformationPolicy(abc.ABC, Generic[VoxelPieceT]):
+    """An abstract class that represents a policy for how to transform a piece.
+
+    A policy is designed to be given to a solver so that the solver can generate the valid orientations of a given piece within the constraints of a specific puzzle.
+    """
+
+    # @abc.abstractmethod
+    # def allowed_orientations(self, piece: VoxelPieceT) -> list[VoxelPieceT]:
+    #     """Return a list of all orientations for a piece."""
+
+    @abc.abstractmethod
+    def allowed_unique_orientations(self, piece: VoxelPieceT) -> list[VoxelPieceT]:
+        """Return a list of all unique orientations for a piece."""
+
+
+class Piece(AbstractVoxelPiece):
     def __init__(
         self,
         voxels: Iterable[Voxel],
@@ -42,12 +71,22 @@ class Piece(AbstractPiece):
             validate: Check that the piece is contiguous.
         """
         self.name = name
-        self.voxels: Voxels = set(voxels)
         if canonicalize:
-            self.canonicalize()
+            voxels = self._canonicalize(voxels)
+        self._voxels: Voxels = set(voxels)
 
         if validate and not self.is_contiguous():
             raise ValueError("Piece is not contiguous.")
+
+    @classmethod
+    def from_2d(cls, voxels_2d: Iterable[tuple[int, int]], z: int = 0, **kwargs):
+        """Create a Piece from 2D coordinates."""
+        voxels_3d = {(x, y, z) for x, y in voxels_2d}
+        return cls(voxels_3d, **kwargs)
+
+    @property
+    def voxels(self) -> Voxels:
+        return self._voxels
 
     def __len__(self):
         """Return the number of voxels in the piece."""
@@ -77,17 +116,25 @@ class Piece(AbstractPiece):
 
         return nx.is_connected(G)
 
-    def canonicalize(self):
+    def _canonicalize(self, voxels: Iterable[Voxel]) -> set[Voxel]:
         """Shift coords so that minimal x,y,z are all zero or non-negative."""
-        if not self.voxels:
-            return
-        min_x = min(x for (x, _, _) in self.voxels)
-        min_y = min(y for (_, y, _) in self.voxels)
-        min_z = min(z for (_, _, z) in self.voxels)
-        self.voxels = {(x - min_x, y - min_y, z - min_z) for (x, y, z) in self.voxels}
+        min_x = min(x for (x, _, _) in voxels)
+        min_y = min(y for (_, y, _) in voxels)
+        min_z = min(z for (_, _, z) in voxels)
+        return {(x - min_x, y - min_y, z - min_z) for (x, y, z) in voxels}
 
-    def translate(self, dx: int, dy: int, dz: int) -> Self:
+    def canonicalize(self) -> Self:
+        """Shift coords so that minimal x,y,z are all zero or non-negative."""
+        return self.__class__(self._voxels, canonicalize=True, name=self.name)
+
+    def translate(self, *args: int) -> Self:
         """Return a new Piece shifted by (dx, dy, dz)."""
+        try:
+            dx, dy, dz = args
+        except ValueError as e:
+            raise ValueError(
+                f"Expected 3 arguments (dx, dy, dz), got {len(args)}"
+            ) from e
         new_coords = {(x + dx, y + dy, z + dz) for (x, y, z) in self.voxels}
         return self.__class__(new_coords, canonicalize=False, name=self.name)
 
@@ -108,28 +155,6 @@ class Piece(AbstractPiece):
         """Rotate 90° about Z axis: (x,y,z) -> (-y, x, z)"""
         new_coords = {(-y, x, z) for (x, y, z) in self.voxels}
         return self.__class__(new_coords, canonicalize=canonicalize, name=self.name)
-
-    def all_rotations(self) -> set[Self]:
-        """
-        Return a set of all distinct orientations (rotations) of this piece
-        under the group generated by 90° rotations about X, Y, Z axes.
-        """
-        rotations: set[Self] = set()
-        # We'll generate by applying sequences of rotations.
-        # Because there are only 24 possible orientations for cubes under rotations (no reflection),
-        # this is finite and small.
-        to_explore = [self]
-
-        while to_explore:
-            p = to_explore.pop()
-            if p in rotations:
-                continue
-            rotations.add(p)
-            # apply the three basic rotations
-            for rp in (p.rotate_x(), p.rotate_y(), p.rotate_z()):
-                if rp not in rotations:
-                    to_explore.append(rp)
-        return rotations
 
     @functools.cache
     def unique_rotations(self, canonicalize: bool = True) -> set["Piece"]:
@@ -155,9 +180,6 @@ class Piece(AbstractPiece):
                     to_explore.append(rp)
 
         return unique_rotations
-    
-    def rotations(self) -> Generator[Self, None, None]:
-        pass
 
     def bounding_box(self) -> tuple[Voxel, Voxel]:
         """
@@ -211,8 +233,36 @@ class Piece(AbstractPiece):
         return f"{self.__class__.__name__}({sorted(self.voxels)})"
 
 
+class PolicyFull3DRotations(TransformationPolicy[Piece]):
+    """Allows all possible rotations of a 3D piece."""
+
+    def allowed_orientations(self, piece: Piece) -> list[Piece]:
+        """
+        Return a list of unique orientations (rotations) of this piece
+        under the group generated by 90° rotations about X, Y, Z axes.
+        """
+
+        return list(piece.unique_rotations())
+
+
+class Policy2DRotationsNoFlip(TransformationPolicy[Piece]):
+    """Allows four rotations of a 2D piece. No flips allowed."""
+
+    def allowed_unique_orientations(self, piece: Piece) -> list[Piece]:
+        """Returns a list of unique rotations of a 2D piece with no flips."""
+
+        return list(
+            {
+                piece,
+                piece.rotate_z(),
+                piece.rotate_z().rotate_z(),
+                piece.rotate_z().rotate_z().rotate_z(),
+            }
+        )
+
+
 class Space:
-    def __init__(self, allowed_voxels: Voxels, constraint: Voxels = set()):
+    def __init__(self, allowed_voxels: Voxels):
         """
         Create a Space for valid solutions.
 
@@ -223,8 +273,7 @@ class Space:
             constraint: Set of Voxels that act as a container / constraint. Often used for packing puzzles.
         """
         self.allowed_voxels = allowed_voxels
-        self.constraint = constraint
-        self.pieces: set[Piece] = set()
+        self.pieces: set[AbstractVoxelPiece] = set()
 
     @classmethod
     def cuboid(cls, size_x: int, size_y: int, size_z: int) -> "Space":
@@ -245,6 +294,36 @@ class Space:
         for piece in self.pieces:
             voxels.update(piece.voxels)
         return voxels
+
+    @property
+    def min_x(self) -> int:
+        """Return the minimum x coordinate of all allowed voxels."""
+        return min(x for x, _, _ in self.allowed_voxels)
+
+    @property
+    def max_x(self) -> int:
+        """Return the maximum x coordinate of all allowed voxels."""
+        return max(x for x, _, _ in self.allowed_voxels)
+
+    @property
+    def min_y(self) -> int:
+        """Return the minimum y coordinate of all allowed voxels."""
+        return min(y for _, y, _ in self.allowed_voxels)
+
+    @property
+    def max_y(self) -> int:
+        """Return the maximum y coordinate of all allowed voxels."""
+        return max(y for _, y, _ in self.allowed_voxels)
+
+    @property
+    def min_z(self) -> int:
+        """Return the minimum z coordinate of all allowed voxels."""
+        return min(z for _, _, z in self.allowed_voxels)
+
+    @property
+    def max_z(self) -> int:
+        """Return the maximum z coordinate of all allowed voxels."""
+        return max(z for _, _, z in self.allowed_voxels)
 
     def can_place(self, piece: Piece) -> bool:
         """Check if piece in its current position and orientation can fit into the space and does not overlap occupied voxels."""
@@ -269,11 +348,41 @@ class Space:
         """Remove a piece from space (for backtracking)."""
         self.pieces.remove(piece)
 
+    def valid_placements(self, piece: Piece) -> list[Piece]:
+        """Given a piece of a certain orientation, return all translations of that piece that are valid placements in the space."""
+        piece = piece.canonicalize()
+        # Get bounds of allowed translations.
+        ((_, _, _), (max_x, max_y, max_z)) = piece.bounding_box()
+        space_min_x, space_max_x = self.min_x, self.max_x
+        space_min_y, space_max_y = self.min_y, self.max_y
+        space_min_z, space_max_z = self.min_z, self.max_z
 
-class Solver:
+        # Generate all translations.
+        translations: list[Piece] = []
+        for x in range(space_min_x, space_max_x - max_x + 1):
+            for y in range(space_min_y, space_max_y - max_y + 1):
+                for z in range(space_min_z, space_max_z - max_z + 1):
+                    translated_piece = piece.translate(x, y, z)
+                    if self.can_place(translated_piece):
+                        translations.append(translated_piece)
+
+        return translations
+
+
+class AbstractSolver(abc.ABC):
+    """Abstract class for a puzzle solver."""
+
+    @abc.abstractmethod
+    def solve(self) -> list[list[Piece]]:
+        """Solve a puzzle and return a list of solutions."""
+
+
+class Solver(AbstractSolver):
     def __init__(self, space: Space, pieces: list[Piece]):
         self.space = space
-        self.pieces = sorted(pieces, key=lambda x: len(x.unique_rotations()), reverse=True)
+        self.pieces = sorted(
+            pieces, key=lambda x: len(x.unique_rotations()), reverse=True
+        )
         self.solutions: list[list[Piece]] = []
 
     def legal_translations(self, piece: Piece) -> list[Piece]:
@@ -340,15 +449,14 @@ class Solver:
                     placed_pieces.pop()
                     self.space.remove(candidate)
 
+
 def cuboid(size_x: int, size_y: int, size_z: int) -> Voxels:
     """Create a rectangular set of Voxels of shape (size_x, size_y, size_z)."""
     voxels = {
-        (x, y, z)
-        for x in range(size_x)
-        for y in range(size_y)
-        for z in range(size_z)
+        (x, y, z) for x in range(size_x) for y in range(size_y) for z in range(size_z)
     }
     return voxels
+
 
 def pieces_disconnected(piece_a: Piece, piece_b: Piece) -> bool:
     """Checks if two pieces can be trivially infinitely separated.
@@ -358,116 +466,3 @@ def pieces_disconnected(piece_a: Piece, piece_b: Piece) -> bool:
     return piece_a.bounding_box_cuboid().voxels.isdisjoint(
         piece_b.bounding_box_cuboid().voxels
     )
-
-
-if __name__ == "__main__":
-    p1 = Piece(
-        {(0, 0, 0), (0, 1, 0), (1, 0, 0), (1, 1, 0), (0, 0, 1), (0, 0, 2)},
-        name="L_shape",
-    )
-    p2 = Piece(
-        {(0, 0, 0), (1, 0, 0), (2, 0, 0), (2, 0, 1), (0, 1, 0), (0, 2, 0), (0, 2, 1)},
-        name="V_shape",
-    )
-    p3 = Piece(
-        {(0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1), (2, 0, 0), (2, 1, 0), (2, 2, 0)},
-        name="J_shape",
-    )
-    p4 = Piece({(0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 1, 1), (0, 1, 2)}, name="S_shape")
-    vegetable_basket = [p1, p2, p3, p4]
-
-    p1 = Piece({(0, 0, 0), (1, 0, 0), (0, 1, 0)}, name="orange_L_piece")
-    p2 = Piece(
-        {
-            (0, 0, 0),
-            (0, 1, 0),
-            (0, 2, 0),
-            (1, 1, 0),
-            (1, 2, 0),
-            (2, 1, 0),
-            (2, 2, 0),
-            (0, 0, 1),
-            (0, 1, 1),
-            (0, 2, 1),
-            (1, 1, 1),
-            (1, 2, 1),
-            (2, 1, 1),
-            (2, 2, 1),
-            (1, 3, 1),
-            (1, 3, 2),
-        },
-        name="orange_block_piece",
-    )
-    p3 = Piece(
-        {
-            (0, 0, 0),
-            (1, 0, 0),
-            (2, 0, 0),
-            (3, 0, 0),
-            (3, 0, 1),
-            (3, -1, 0),
-            (3, -1, 1),
-            (0, 0, 1),
-            (0, 0, 2),
-            (0, 1, 2),
-            (0, 2, 2),
-            (1, 2, 2),
-        },
-        name="orange_J_piece",
-    )
-    p4 = Piece(
-        {
-            (0, 0, 0),
-            (1, 0, 0),
-            (0, 1, 0),
-            (1, 1, 0),
-            (2, 1, 0),
-            (0, 2, 0),
-            (0, 0, 1),
-            (0, 0, 2),
-            (0, 0, 3),
-            (0, 1, 3),
-            (0, 2, 3),
-            (1, 2, 3),
-            (2, 2, 3),
-            (3, 2, 3),
-            (3, 2, 2),
-            (3, 2, 1),
-        },
-        name="gray_logo",
-    )
-    p5 = Piece(
-        {
-            (0, 0, 0),
-            (0, 1, 0),
-            (0, 2, 0),
-            (0, 2, 1),
-            (1, 0, 0),
-            (2, 0, 0),
-            (3, 0, 0),
-            (3, 1, 0),
-            (3, 1, 1),
-            (3, 1, 2),
-            (2, 1, 2),
-            (2, 1, 3),
-            (1, 1, 3),
-            (0, 1, 3),
-            (0, 2, 3),
-            (0, 3, 3),
-            (0, 3, 2),
-        },
-        name="gray_signature",
-    )
-    roughhouse = [p1, p2, p3, p4, p5]
-
-    solver = Solver(
-        space=Space.cuboid(3, 3, 3),
-        pieces=vegetable_basket,
-    )
-    solutions = solver.solve()
-
-    print(f"Found {len(solutions)} solutions.")
-    for sol in solutions:
-        print(sol)
-
-    visualize.plot_solutions(solutions)
