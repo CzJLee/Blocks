@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 class DLXNode:
     """A node in the Dancing Links structure."""
+    
+    __slots__ = ("L", "R", "U", "D", "C")
 
     def __init__(self, column: "ColumnNode"):
         # Links to Left, Right, Up, Down nodes.
@@ -24,6 +26,8 @@ class DLXNode:
 
 class ColumnNode(DLXNode):
     """Column header node."""
+    
+    __slots__ = ("name", "size")
 
     def __init__(self, name: str):
         super().__init__(self)
@@ -193,7 +197,7 @@ class DLXSolver:
         current_solution: list[DLXNode],
         root: ColumnNode,
         valid_solutions: list[list[DLXNode]],
-        first_call = True,
+        first_call=True,
     ) -> None:
         """Algorithm X recursive search.
 
@@ -213,11 +217,16 @@ class DLXSolver:
         # Choose column with smallest size for the most optimal approach.
         col = self.get_smallest_column(root)
 
+        if col.size == 0:
+            # Early exit. If column is empty, this branch is impossible.
+            return
+
         # Cover this column.
         self.cover(col)
 
         if first_call:
             logger.debug("Column %s has %d rows.", col.name, col.size)
+
         for i, row in enumerate(self.iterate_down(col), start=1):
             if first_call:
                 logger.debug("Searching row %d / %d.", i, col.size)
