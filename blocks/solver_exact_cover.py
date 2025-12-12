@@ -166,8 +166,8 @@ def _search(
     ROW: np.ndarray,
     S: np.ndarray,
     root: int,
-    max_solutions: int = 1000000,
-    max_depth: int = 100,
+    max_solutions: int,
+    max_depth: int,
 ) -> np.ndarray:
     """
     Find solutions using iterative DLX search with explicit stack.
@@ -459,12 +459,11 @@ class DLXSolver:
                         self.L[row_start] = node
                         row_prev = node  # Update the right most node in the row.
 
-    def solve(self, max_solutions: int = 1000000) -> list[list[int]]:
+    def solve(self, max_solutions: int = 100) -> list[list[int]]:
         """Find solutions for the DLX matrix.
 
         Args:
-            max_solutions: Maximum number of solutions to find. If None, find
-                all solutions.
+            max_solutions: Maximum number of solutions to find.
         """
 
         start_time = time.perf_counter()
@@ -577,16 +576,20 @@ class SolverExactCover2D(blocks.AbstractSolver):
         )
         return matrix, piece_at_row_index
 
-    def solve(self) -> list[list[blocks.Piece]]:
+    def solve(self, max_solutions: int = 1000) -> list[list[blocks.Piece]]:
         """Solve an Exact Cover 2D problem using Knuth's Algorithm X with Dancing Links (DLX).
 
         Returns:
             A list of found solutions, where each solution is a list of pieces.
+
+        Args:
+            max_solutions: Maximum number of solutions to find. If None, find
+                all solutions.
         """
         dlx_matrix, piece_at_row_index = self.generate_dlx_matrix()
 
         dlx_solver = DLXSolver(matrix=dlx_matrix, max_depth=self.num_pieces + 1)
-        solutions = dlx_solver.solve()
+        solutions = dlx_solver.solve(max_solutions=max_solutions)
 
         piece_solutions = [
             [piece_at_row_index[piece_index] for piece_index in solution]

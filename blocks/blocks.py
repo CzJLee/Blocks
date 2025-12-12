@@ -7,15 +7,34 @@ import networkx as nx
 
 logger = logging.getLogger(__name__)
 
-type Voxel = tuple[int, int, int]
+VoxelT = TypeVar("VoxelT", bound=tuple)
+
+type Voxel3D = tuple[int, int, int]
 """An (x, y, z) coordinate representing a 1x1x1 unit cube of a piece."""
 
-type Voxels = set[Voxel]
+type Voxel2D = tuple[int, int]
+"""An (x, y) coordinate representing a 1x1 unit square of a piece."""
+
+type Voxels = set[Voxel3D]
 """A set of voxels that represent a solid puzzle piece."""
 
 VoxelPieceT = TypeVar("VoxelPieceT", bound="AbstractVoxelPiece")
 """Type Var for AbstractVoxelPiece."""
 
+class AbstractPiece(abc.ABC):
+    """Abstract base class for a puzzle piece."""
+    
+    @abc.abstractmethod
+    def __len__(self) -> int:
+        """Length of the piece."""
+        
+    @abc.abstractmethod
+    def __hash__(self) -> int:
+        """Hash of the piece."""
+        
+    @abc.abstractmethod
+    def __eq__(self, other) -> bool:
+        """Checks if two pieces are exactly equal."""
 
 class AbstractVoxelPiece(abc.ABC):
     """Abstract base class for an arbitrary voxel set puzzle piece."""
@@ -56,7 +75,7 @@ class TransformationPolicy(abc.ABC, Generic[VoxelPieceT]):
 class Piece(AbstractVoxelPiece):
     def __init__(
         self,
-        voxels: Iterable[Voxel],
+        voxels: Iterable[Voxel3D],
         name: str = "Piece",
         canonicalize: bool = True,
         validate: bool = True,
@@ -116,7 +135,7 @@ class Piece(AbstractVoxelPiece):
 
         return nx.is_connected(G)
 
-    def _canonicalize(self, voxels: Iterable[Voxel]) -> set[Voxel]:
+    def _canonicalize(self, voxels: Iterable[Voxel3D]) -> set[Voxel3D]:
         """Shift coords so that minimal x,y,z are all zero or non-negative."""
         min_x = min(x for (x, _, _) in voxels)
         min_y = min(y for (_, y, _) in voxels)
@@ -181,7 +200,7 @@ class Piece(AbstractVoxelPiece):
 
         return unique_rotations
 
-    def bounding_box(self) -> tuple[Voxel, Voxel]:
+    def bounding_box(self) -> tuple[Voxel3D, Voxel3D]:
         """
         Returns ((min_x, min_y, min_z), (max_x, max_y, max_z)) for the piece.
         """

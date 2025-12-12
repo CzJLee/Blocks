@@ -21,13 +21,16 @@ if __name__ == "__main__":
         policy=blocks.Policy2DRotationsNoFlip(),
     )
 
-    solutions = solver.solve()
+    solutions = solver.solve(max_solutions=100000)
+    solution_set = set(tuple(solution) for solution in solutions)
 
     print(f"Found {len(solutions)} solutions.")
-    for sol in solutions:
-        print(sol)
+    print(f"Found {len(solution_set)} unique solutions.")
+    # for sol in solutions:
+    #     print(sol)
 
-    # visualize.plot_solutions(solutions)
+    for solution in solution_set:
+        visualize.plot_solutions([solution])
 
     # solver = blocks.Solver(
     #     space=blocks.Space.cuboid(8, 8, 1),
